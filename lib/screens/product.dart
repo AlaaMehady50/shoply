@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../providers/cart_provider.dart';
 
 class Productpage extends StatelessWidget {
   final String productName;
@@ -74,6 +77,13 @@ class Productpage extends StatelessWidget {
             const SizedBox(height: 20),
             ElevatedButton.icon(
               onPressed: () {
+                final cartProvider =
+                    Provider.of<CartProvider>(context, listen: false);
+                cartProvider.addToCart({
+                  'name': productName,
+                  'image': productImage,
+                  'price': productPrice,
+                });
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text("Added to cart")),
                 );

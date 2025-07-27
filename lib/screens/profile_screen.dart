@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -12,6 +15,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String fullName = '';
   String email = '';
   String phone = '';
+  String? profileImagePath;
 
   @override
   void initState() {
@@ -25,7 +29,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
       fullName = prefs.getString('full_name') ?? 'Not Provided';
       email = prefs.getString('email') ?? 'Not Provided';
       phone = prefs.getString('phone') ?? 'Not Provided';
+      profileImagePath = prefs.getString('profile_image');
     });
+  }
+
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+
+    if (pickedFile != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('profile_image', pickedFile.path);
+      setState(() {
+        profileImagePath = pickedFile.path;
+      });
+    }
   }
 
   @override
@@ -40,13 +58,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: Padding(
         padding: const EdgeInsets.all(20.0),
         child: Card(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           elevation: 5,
           child: Padding(
             padding: const EdgeInsets.all(25.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Center(
+                  child: GestureDetector(
+                    onTap: _pickImage,
+                    child: CircleAvatar(
+                      radius: 50,
+                      backgroundColor: Colors.grey[300],
+                      backgroundImage:
+                          profileImagePath != null &&
+                                  File(profileImagePath!).existsSync()
+                              ? FileImage(File(profileImagePath!))
+                              : null,
+                      child: profileImagePath == null ||
+                              !File(profileImagePath!).existsSync()
+                          ? const Icon(Icons.camera_alt, size: 50)
+                          : null,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
                 _buildRow(Icons.person, "Name", fullName),
                 const SizedBox(height: 15),
                 _buildRow(Icons.email, "Email", email),

@@ -1,70 +1,57 @@
-import 'package:flutter/material.dart';
+import 'dart:convert';
 
-class CartScreen extends StatefulWidget {
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../providers/cart_provider.dart';
+
+class CartScreen extends StatelessWidget {
   const CartScreen({super.key});
 
-  @override
-  State<CartScreen> createState() => _CartScreenState();
-}
+  Future<void> _placeOrder(BuildContext context) async {
+    final cartProvider = Provider.of<CartProvider>(context, listen: false);
+    final prefs = await SharedPreferences.getInstance();
 
-class _CartScreenState extends State<CartScreen> {
-  List<Map<String, dynamic>> cartItems = [
-    {
-      'name': 'Product 1',
-      'price': 29.99,
-      'quantity': 1,
-      'image': 'https://via.placeholder.com/100',
-    },
-    {
-      'name': 'Product 2',
-      'price': 30.99,
-      'quantity': 3,
-      'image': 'https://via.placeholder.com/100',
-    },
-    {
-      'name': 'Product 4',
-      'price': 32.99,
-      'quantity': 1,
-      'image': 'https://via.placeholder.com/100',
-    },
-  ];
+    // Retrieve existing orders
+    final orders = prefs.getStringList('orders') ?? [];
+    debugPrint('Existing orders: $orders');
 
-  void increaseQuantity(int index) {
-    setState(() {
-      cartItems[index]['quantity']++;
-    });
-  }
-
-  void decreaseQuantity(int index) {
-    setState(() {
-      if (cartItems[index]['quantity'] > 1) {
-        cartItems[index]['quantity']--;
+    // Sanitize existing orders to ensure all entries are valid JSON strings
+    final sanitizedOrders = orders.map((order) {
+      try {
+        return jsonEncode(jsonDecode(order));
+      } catch (e) {
+        debugPrint('Invalid order format: $order');
+        return null;
       }
-    });
-  }
+    }).where((order) => order != null).cast<String>().toList();
 
-  void removeItem(int index) {
-    setState(() {
-      cartItems.removeAt(index);
-    });
-  }
+    // Create a new order with all cart items grouped together
+    final newOrder = {
+      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+      'items': cartProvider.cartItems.map((item) => {
+        'productName': item['name'],
+        'price': item['price'],
+        'quantity': 1,
+        'image': item['image'],
+      }).toList(),
+      'date': DateTime.now().toIso8601String(),
+    };
 
-  int get totalItems =>
-    cartItems.fold(0, (sum, item) => sum + (item['quantity'] as int));
+    sanitizedOrders.add(jsonEncode(newOrder));
+    await prefs.setStringList('orders', sanitizedOrders);
+    debugPrint('Updated orders: $sanitizedOrders');
 
-double get totalAmount => cartItems.fold(
-  0.0,
-  (sum, item) =>
-      sum + ((item['price'] as double) * (item['quantity'] as int)),
-);
+    // Clear cart using CartProvider's method
+    cartProvider.clearCart();
 
-  void placeOrder() {
+    // Show confirmation message
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Order Confirmation'),
-        content: Text('You are placing an order for $totalItems item(s) '
-            'with a total of \$${totalAmount.toStringAsFixed(2)}.'),
+        title: const Text('Order Placed'),
+        content: const Text('Your order has been placed successfully!'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -75,121 +62,52 @@ double get totalAmount => cartItems.fold(
     );
   }
 
-  Widget buildCartItem(int index) {
-    final item = cartItems[index];
+  @override
+  Widget build(BuildContext context) {
+    final cartProvider = Provider.of<CartProvider>(context);
 
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(8),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Cart"),
+        backgroundColor: Colors.deepPurple,
+      ),
+      body: cartProvider.cartItems.isEmpty
+          ? const Center(
+              child: Text("Your cart is empty!"),
+            )
+          : ListView.builder(
+              itemCount: cartProvider.cartItems.length,
+              itemBuilder: (context, index) {
+                final item = cartProvider.cartItems[index];
+                return ListTile(
+                  leading: Image.asset(item['image'], width: 50, height: 50, fit: BoxFit.cover),
+                  title: Text(item['name']),
+                  subtitle: Text('Price: \$${item['price'].toStringAsFixed(2)}'),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.remove_circle),
+                    onPressed: () {
+                      cartProvider.removeFromCart(item);
+                    },
+                  ),
+                );
+              },
+            ),
+      bottomNavigationBar: Container(
+        padding: const EdgeInsets.all(16),
         child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: Image.network(item['image'], height: 60, width: 60),
+            Text(
+              'Total: \$${cartProvider.totalPrice.toStringAsFixed(2)}',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(item['name'],
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 16)),
-                  const SizedBox(height: 4),
-                  Text('\$${item['price'].toStringAsFixed(2)}',
-                      style: const TextStyle(color: Colors.green)),
-                ],
-              ),
-            ),
-            Row(
-              children: [
-                IconButton(
-                  onPressed: () => decreaseQuantity(index),
-                  icon: const Icon(Icons.remove_circle_outline),
-                ),
-                Text(item['quantity'].toString(),
-                    style: const TextStyle(fontSize: 16)),
-                IconButton(
-                  onPressed: () => increaseQuantity(index),
-                  icon: const Icon(Icons.add_circle_outline),
-                ),
-              ],
-            ),
-            IconButton(
-              onPressed: () => removeItem(index),
-              icon: const Icon(Icons.delete, color: Colors.red),
+            ElevatedButton(
+              onPressed: () => _placeOrder(context),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple),
+              child: const Text("Place Order"),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Shopping Cart"),
-        centerTitle: true,
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(12),
-              itemCount: cartItems.length,
-              itemBuilder: (_, index) => buildCartItem(index),
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              boxShadow: [BoxShadow(blurRadius: 6, color: Colors.black12)],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text('Total Items: $totalItems',
-                    style: const TextStyle(fontSize: 16)),
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Total Amount:',
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      '\$${totalAmount.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                ElevatedButton(
-                  onPressed: placeOrder,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurple,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: const Text(
-                    'Place Order',
-                    style: TextStyle(fontSize: 16),
-                  ),
-                )
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

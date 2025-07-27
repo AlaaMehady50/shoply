@@ -35,18 +35,22 @@ class SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _checkLoginStatus() async {
-    await Future.delayed(const Duration(seconds: 3));
-    final prefs = await SharedPreferences.getInstance();
-    final fullName = prefs.getString('full_name');
+  print('Checking login status...');
+  await Future.delayed(const Duration(seconds: 3));
+  final prefs = await SharedPreferences.getInstance();
+  final fullName = prefs.getString('full_name');
+  print('Full name: $fullName');
 
-    if (!mounted) return;
+  if (!mounted) return;
 
-    if (fullName != null && fullName.isNotEmpty) {
-      Navigator.pushReplacementNamed(context, '/home');
-    } else {
-      Navigator.pushReplacementNamed(context, '/auth');
-    }
+  if (fullName != null && fullName.isNotEmpty) {
+    print('Navigating to Home...');
+    Navigator.pushReplacementNamed(context, '/home');
+  } else {
+    print('Navigating to Auth...');
+    Navigator.pushReplacementNamed(context, '/auth');
   }
+}
 
   @override
   void dispose() {
